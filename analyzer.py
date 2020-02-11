@@ -13,10 +13,28 @@ def print_list(_list, title='...'):
     list(map(lambda x: print(x), _list))
 
 
+def print_as_table_2c(rows, title='...'):
+    print(title)
+    # ('{0: <%s}{1: <5}' % '10').format('123', '45')
+    col_size_list = [0, 0]
+    prepared_rows = []
+    for row in rows:
+        cells = []
+        for col_num in range(row):
+            cell = str(row[col_num])
+            cell_len = len(cell)
+            cells.append(cell)
+
+            max_length = col_size_list[col_num]
+            col_size_list[col_num] = cell_len if cell_len > max_length else max_length
+        prepared_rows.append(tuple(cells))
+
+
 def get_api_response(resource):
     req = Request('{}{}'.format(GH_API_HOST, resource))
     req.add_header('Accept', 'application/vnd.github.v3+json')
     res = urlopen(req)
+    # TODO Rate problem
     return json.loads(res.read().decode('utf-8'))
 
 
@@ -58,6 +76,7 @@ def get_repo_contributors(_url):
     """
     # todo error 403 on 'https://api.github.com/repos/torvalds/linux/contributors'
     res = get_api_response('/repos/{}/contributors?anon=1&per_page=30'.format('/'.join(get_repo_full_name(_url))))
+    table_data = [(contr['login'], contr['contributions']) for contr in res]
 
 
 def router(args):
