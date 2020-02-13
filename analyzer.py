@@ -8,13 +8,19 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG)
 
 
-def print_list(_list, title='...'):
+def print_title(title):
+    print('===')
     print(title)
+
+
+def print_list(_list, title='...'):
+    print_title(title)
     list(map(lambda x: print(x), _list))
 
 
 def print_as_table_2c(rows, title='...'):
-    print(title)
+    # todo empty rows
+    print_title(title)
     col_size_list = [0, 0]
     prepared_rows = []
     for row in rows:
@@ -58,10 +64,9 @@ def is_repo_url(_url) -> bool:
 def get_repo_full_name(_url) -> str:
     """
     :param _url: string like 'https://github.com/facebookresearch/cparser'
-    :return:
     """
     if is_repo_url(_url):
-        return _url.split('/')[3:5]
+        return '/'.join(_url.split('/')[3:5])
     return ''
 
 
@@ -72,16 +77,38 @@ def get_repos(org):
     print_list([repo['full_name'] for repo in res], 'Repos:')
 
 
-def get_repo_contributors(_url):
-    """Getting repo's contributors by a public URL
+def get_repo_contributors(repo):
+    """Getting repo's contributors by a fullname
 
-    :param _url: string like 'https://github.com/facebookresearch/cparser'
+    :param repo: string like 'facebookresearch/cparser'
     :return:
     """
     # todo error 403 on 'https://api.github.com/repos/torvalds/linux/contributors'
-    res = get_api_response('/repos/{}/contributors?anon=1&per_page=30'.format('/'.join(get_repo_full_name(_url))))
-    table_data = [(contr['login'] if 'login' in contr else '-', contr['contributions']) for contr in res]
-    print_as_table_2c(table_data, 'Contributors')
+    res = get_api_response('/repos/{}/contributors?anon=1&per_page=30'.format(repo))
+    return [(contr['login'] if 'login' in contr else '-', contr['contributions'])
+            for contr in res]
+
+
+def get_repo_pull_requests(repo):
+    # todo param base (branch)
+    res = get_api_response('/repos/{}/pulls?per_page=30&state=all'.format(repo))
+    # todo process pages
+    prs = {'open': [], 'closed': []}
+    for pr in res:
+        prs[pr['state']].append(pr)
+    return len(prs['open']), len(prs['closed'])
+
+
+def make_full_analysis(_url) -> bool:
+    """
+    :param _url: string like 'https://github.com/facebookresearch/cparser'
+    """
+    repo = get_repo_full_name(_url)
+    if not repo:
+        return False
+    print_as_table_2c(get_repo_contributors(repo), 'Contributors')
+    print_list(['Open {}, closed {}'.format(*get_repo_pull_requests(repo))], 'Pull requests')
+    return True
 
 
 def router(args):
@@ -91,8 +118,8 @@ def router(args):
         return
     if getattr(args, 'url', False):
         logger.debug('The repo\'s URL: {}'.format(args.url))
-        get_repo_contributors(args.url)
-        return
+        if make_full_analysis(args.url):
+            return
     print('Nothing')
 
 
@@ -100,6 +127,7 @@ def main():
     arg_parser = argparse.ArgumentParser(description='GITHUB repo analyzer.')
     arg_parser.add_argument('--org', help='Show a list of repos by an organization')
     arg_parser.add_argument('--url', help='Show a full analysis')
+    # todo take token for more request amount (Rate problem)
     # todo debug logging
     args = arg_parser.parse_args()
     router(args)
