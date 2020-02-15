@@ -47,11 +47,35 @@ class TestViewLevelFunctions(unittest.TestCase):
             print_list(['!', '!'], title='>')
         self.assertEqual(out.getvalue(), '===\n>\n!\n!\n')
 
+    def test_print_as_table_2c(self):
+        """Test prints out formatted lines as a table with 2 auto-sized columns"""
+        with self.assertRaises(TypeError):
+            print_as_table_2c()
+
+        with self.assertRaises(AssertionError):
+            print_as_table_2c([(1,)])
+
+        with self.assertRaises(AssertionError):
+            print_as_table_2c([(1, 2, 3)])
+
+        with globals()['__test_stdout']() as out:
+            print_as_table_2c([])
+        self.assertEqual(out.getvalue(), '===\n...\nEmpty\n')
+
+        with globals()['__test_stdout']() as out:
+            print_as_table_2c([(1, 2)], title='!')
+        self.assertEqual(out.getvalue(), '===\n!\n1 2\n')
+
+        with globals()['__test_stdout']() as out:
+            print_as_table_2c([(1, 2), (100, 2)], title='!')
+        self.assertEqual(out.getvalue(), '===\n!\n1   2\n100 2\n')
+
 
 def __run_tests():
     suite = unittest.TestSuite()
     suite.addTest(TestViewLevelFunctions('test_print_title'))
     suite.addTest(TestViewLevelFunctions('test_print_list'))
+    suite.addTest(TestViewLevelFunctions('test_print_as_table_2c'))
     runner = unittest.TextTestRunner()
     runner.run(suite)
 
@@ -76,6 +100,7 @@ def print_as_table_2c(rows, title='...'):
     col_size_list = [0, 0]
     prepared_rows = []
     for row in rows:
+        assert len(row) == 2
         cells = []
         for col_num in range(2):
             cell = str(row[col_num])
