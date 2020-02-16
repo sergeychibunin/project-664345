@@ -5,13 +5,15 @@ import argparse
 import datetime
 import logging
 import json
+from argparse import ArgumentParser, Namespace
+from typing import Union, Text, Sequence, Any, Optional
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 from contextlib import contextmanager
 
 GH_API_HOST = 'https://api.github.com'
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 notifications = set()
 
 
@@ -23,6 +25,14 @@ def __test_stdout():
         yield sys.stdout
     finally:
         sys.out = old_stdout
+
+
+class _ArgDebugAction(argparse.Action):
+
+    def __call__(self, parser: ArgumentParser, namespace: Namespace, values: Union[Text, Sequence[Any], None],
+                 option_string: Optional[Text] = ...) -> None:
+        global logger
+        logger.setLevel(logging.DEBUG)
 
 
 class TestViewLevelFunctions(unittest.TestCase):
@@ -131,7 +141,7 @@ def get_api_response(resource):
     try:
         # TODO Rate problem (if you need to run the analyzer many times in hour)
         res = urlopen(req)
-        links = res.getheader('Link')
+        links = res.getheader('Link') or ''
     except HTTPError:
         # todo GH messages
         # todo error 403 on 'https://api.github.com/repos/torvalds/linux/contributors' (contributor list is too large)
@@ -209,13 +219,13 @@ def get_repo_data(repo, category: str, eld: int, branch=None, b_date=None, e_dat
             is_run = False
 
     prs = {'open': [], 'closed': [], 'old': []}
-    # todo user date arg
     date_from = b_date if b_date else datetime.datetime(1970, 1, 1)
     date_to = e_date if e_date else datetime.datetime.today()
     limit = datetime.timedelta(eld)
+
     for pr in pages:
         pr_created = datetime.datetime.strptime(pr['created_at'], '%Y-%m-%dT%H:%M:%SZ')
-        if date_from > pr_created >= date_to:
+        if date_from > pr_created or pr_created >= date_to:
             continue
 
         pr_closed = datetime.datetime.strptime(pr['closed_at'], '%Y-%m-%dT%H:%M:%SZ') if pr['closed_at'] else None
@@ -241,10 +251,11 @@ def make_full_analysis(_url, branch: str, b_date: datetime.datetime, e_date: dat
     repo = get_repo_full_name(_url)
     if not repo:
         return False
-    # print_as_table_2c(get_repo_contributors(repo), 'Contributors')
+    print_as_table_2c(get_repo_contributors(repo), 'Contributors')
     print_list(['Open {}, closed {}, old {}'.
                format(*get_repo_data(repo, 'pulls', 30, branch, b_date, e_date))], 'Pull requests')
-    print_list(['Open {}, closed {}, old {}'.format(*get_repo_data(repo, 'issues', 14))], 'Issues')
+    print_list(['Open {}, closed {}, old {}'.
+               format(*get_repo_data(repo, 'issues', 14, b_date=b_date, e_date=e_date))], 'Issues')
     return True
 
 
@@ -271,6 +282,12 @@ def main():
             msg = "Not a valid date: '{0}'.".format(s)
             raise argparse.ArgumentTypeError(msg)
 
+    def is_valid_args(_args):
+        if _args.b_date and _args.e_date and _args.b_date >= _args.e_date:
+            add_notification('Not valid dates')
+            return False
+        return True
+
     arg_parser = argparse.ArgumentParser(description='GITHUB repo analyzer.')
     arg_parser.add_argument('--org', help='Show a list of repos by an organization')
     arg_parser.add_argument('--url', help='Show a full analysis')
@@ -281,9 +298,10 @@ def main():
                             help='Specify an end date like \'YYYY-MM-DD HH:MM:SS\'. It is an optional')
     arg_parser.add_argument('--self-checking',
                             dest='maintenance', help='Run a tool\'s maintenance', action='store_true')
-    # todo debug logging
+    arg_parser.add_argument('--debug', action=_ArgDebugAction, type=bool)
     args = arg_parser.parse_args()
-    router(args)
+    if is_valid_args(args):
+        router(args)
     print_list(notifications, 'System notifications') if notifications else None
 
 
